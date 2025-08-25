@@ -6,10 +6,10 @@ const (
 
 var MiddlewaresList MiddlewareSets = MiddlewareSets{
 	MogolyRatelimiter: struct {
-		fn   MogolyMiddleware
-		conf any
+		Fn   MogolyMiddleware
+		Conf any
 	}{
-		fn:   RateLimiterMiddleware,
-		conf: RateLimitMiddlewareConfig{},
+		Fn:   RateLimiterMiddleware,
+		Conf: RateLimitMiddlewareConfig{},
 	},
 }

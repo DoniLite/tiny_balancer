@@ -35,10 +35,10 @@ func TestServer_ServeHTTP(t *testing.T) {
 	}))
 	defer backend.Close()
 
-	balancingServer := &Server{Name: "backend", URL: backend.URL, Logs: make(chan Logs, 10)}
+	balancingServer := &Server{Name: "backend", URL: backend.URL}
 	_ = balancingServer.UpgradeProxy()
 
-	server := &Server{Name: "backend", URL: backend.URL, Logs: make(chan Logs, 10)}
+	server := &Server{Name: "backend", URL: backend.URL}
 	_ = server.UpgradeProxy()
 
 	server.AddNewBalancingServer(balancingServer)
@@ -58,7 +58,7 @@ func TestServer_UpgradeProxy(t *testing.T) {
 	server := &Server{Name: "test", URL: backend.URL}
 	err := server.UpgradeProxy()
 	assert.NoError(t, err)
-	assert.NotNil(t, server.Proxy)
+	assert.NotNil(t, server.proxy)
 }
 
 func TestPing(t *testing.T) {

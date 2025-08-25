@@ -12,7 +12,7 @@ import (
 )
 
 type Client struct {
-	conn *connection // Shared wrapper for WebSocket connection
+	conn *Connection // Shared wrapper for WebSocket connection
 
 	// Incoming messages are pushed here by the readPump.
 	// Users can read from this channel to process incoming messages.
@@ -31,11 +31,12 @@ type Client struct {
 	pendingMu       sync.RWMutex
 }
 
-type HandlerFunc func(conn *websocket.Conn, msg Message)
+type HandlerFunc func(msg *Message, conn *Connection) error
 
 type Server struct {
-	upgrader websocket.Upgrader
-	hub      *Hub
+	upgrader   websocket.Upgrader
+	hub        *Hub
+	msgHandler HandlerFunc
 }
 
 type ErrorPayload struct {

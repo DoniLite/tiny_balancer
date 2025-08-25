@@ -16,8 +16,8 @@ import (
 
 // Server
 
-func (s *Server) handleMessage(msg *Message, client *connection) error {
-	return nil
+func (s *Server) handleMessage(msg *Message, client *Connection) error {
+	return s.msgHandler(msg, client)
 }
 
 // Handling http request and trying to upgrade it to a websocket connection.
@@ -29,7 +29,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	log.Printf("ServeHTTP: Client connected from %s\n", ws.RemoteAddr())
 
-	conn := newConnection(ws)
+	conn := NewConnection(ws)
 
 	s.hub.register <- conn
 
@@ -72,7 +72,7 @@ func (c *Client) Connect(serverUrl string, headers http.Header) error {
 	log.Printf("Client: Successfully connected to %s\n", c.connUrl)
 
 	c.mu.Lock()
-	c.conn = newConnection(ws)
+	c.conn = NewConnection(ws)
 	c.isConnected = true
 	c.mu.Unlock()
 
@@ -82,7 +82,7 @@ func (c *Client) Connect(serverUrl string, headers http.Header) error {
 	return nil
 }
 
-func (c *Client) handleIncomingMessage(msg *Message, conn *connection) error {
+func (c *Client) handleIncomingMessage(msg *Message, conn *Connection) error {
 	log.Printf("Client: Received message type %d (ReqID: %s)\n", msg.Action.Type, msg.RequestID) // Debug
 
 	// Check if it's a pending request
@@ -110,7 +110,7 @@ func (c *Client) handleIncomingMessage(msg *Message, conn *connection) error {
 	return nil
 }
 
-func (c *Client) handleDisconnect(conn *connection) {
+func (c *Client) handleDisconnect(conn *Connection) {
 	c.mu.Lock()
 	if c.conn != conn {
 		c.mu.Unlock()
@@ -145,7 +145,7 @@ func (c *Client) Send(msg *Message) error {
 		return fmt.Errorf("client not connected")
 	}
 	log.Printf("Client: Sending message type %d async\n", msg.Action.Type) // Debug
-	conn.sendMsg(msg)
+	conn.SendMsg(msg)
 	return nil
 }
 
@@ -167,6 +167,8 @@ func (c *Client) SendRequest(ctx context.Context, msgType Action_Type, payload a
 		return nil, err
 	}
 
+	msg.RequestID = requestID
+
 	respChan := make(chan *Message, 1)
 
 	c.pendingMu.Lock()
@@ -182,12 +184,12 @@ func (c *Client) SendRequest(ctx context.Context, msgType Action_Type, payload a
 
 	// Send the request
 	log.Printf("Client: Sending request %s (Type: %d)\n", requestID, msg.Action.Type)
-	conn.sendMsg(msg)
+	conn.SendMsg(msg)
 
 	// Waiting for the response
 	select {
 	case resp := <-respChan:
-		log.Printf("Client: Received response for request %s (Type: %s, Error: '%s')\n", requestID, resp.Action.Type, resp.Error)
+		log.Printf("Client: Received response for request %s (Type: %d, Error: '%s')\n", requestID, resp.Action.Type, resp.Error)
 		if resp.Error != "" || resp.Action.Type == ERROR {
 			errMsg := resp.Error
 			if errMsg == "" {
@@ -215,7 +217,7 @@ func (c *Client) Close() {
 	log.Println("Client: Close called.")
 
 	if c.conn != nil && c.isConnected {
-		c.conn.closeSend()
+		c.conn.CloseSend()
 	}
 	c.isConnected = false
 }

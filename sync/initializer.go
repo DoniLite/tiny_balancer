@@ -31,6 +31,7 @@ func NewServer(onMsg HandlerFunc, originChecker func (r *http.Request) bool) *Se
 				return originChecker(r)
 			},
 		},
+		msgHandler: onMsg,
 	}
 
 	server.hub = newHub(server.handleMessage)

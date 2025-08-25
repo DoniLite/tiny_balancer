@@ -8,14 +8,9 @@ linters:
   enable:
     - govet
     - errcheck
-    - gosimple
     - staticcheck
     - unused
-    - gofmt
-    - goimports
-    - gofumpt
 
 issues:
   max-issues-per-linter: 0
   max-same-issues: 0
-

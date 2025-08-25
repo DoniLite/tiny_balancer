@@ -3,7 +3,7 @@
 // license that can be found in the LICENSE file.
 
 /*
-# Tiny Balancer Sync
+# Mogoly Sync
 
 This package handling the RTC communication of the software between the CLI and the GUI program.
 

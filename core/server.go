@@ -5,13 +5,20 @@
 package core
 
 import (
+	"crypto/tls"
+	"errors"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
 	"net/url"
+	"strings"
 	"sync"
 	"time"
+)
+
+var (
+	currentRouter *RouterState
 )
 
 var (
@@ -23,8 +30,42 @@ var (
 	mu       sync.Mutex
 )
 
+func BuildRouter(config *Config) {
+	rs := &RouterState{
+		m: make(map[string]http.Handler),
+		s: make(map[string]*Server),
+	}
+	for _, server := range config.Servers {
+		rs.m[strings.ToLower(server.Name)] = createSingleHttpServer(server)
+		rs.s[strings.ToLower(server.Name)] = server
+	}
+
+	rs.globalConfig = config
+	currentRouter = rs
+}
+
+func GetRouter() *RouterState {
+	return currentRouter
+}
+
+func createSingleHttpServer(s *Server) http.Handler {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", s.ServeHTTP)
+
+	var middlewares []func(http.Handler) http.Handler
+
+	for _, v := range s.Middlewares {
+		m := MiddlewaresList[MiddleWareName(v.Name)]
+
+		middlewares = append(middlewares, m.Fn(v.Config))
+	}
+
+	return ChainMiddleware(mux, middlewares...)
+}
+
 // ping returns a "pong" message consider registering this Handler for the health checking logic
 func Ping(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusOK)
 	w.Write([]byte("pong"))
 }
 
@@ -67,8 +108,8 @@ func HealthChecker(server *Server) (bool, error) {
 }
 
 type RateLimitMiddlewareConfig struct {
-	ReqPerMinute int
-	LimitWindow  time.Duration
+	ReqPerMinute int           `json:"request_per_minute,omitempty" yaml:"request_per_minute,omitempty"`
+	LimitWindow  time.Duration `json:"limit_window,omitempty" yaml:"limit_window,omitempty"`
 }
 
 func RateLimiterMiddleware(config any) func(next http.Handler) http.Handler {
@@ -83,8 +124,12 @@ func RateLimiterMiddleware(config any) func(next http.Handler) http.Handler {
 		}
 	}
 
-	requestsPerMinute := conf.ReqPerMinute
-	rateLimitWindow := conf.LimitWindow
+	if conf.ReqPerMinute > 0 {
+		requestsPerMinute = conf.ReqPerMinute
+	}
+	if conf.LimitWindow > 0 {
+		rateLimitWindow = conf.LimitWindow
+	}
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			ip := r.RemoteAddr // or r.Header["X-Forwarded-For"][0] when the request comes from proxy
@@ -103,7 +148,7 @@ func RateLimiterMiddleware(config any) func(next http.Handler) http.Handler {
 			}
 
 			if len(filtered) >= requestsPerMinute {
-				http.Error(w, "Trop de requêtes, réessaie plus tard", http.StatusTooManyRequests)
+				http.Error(w, "Max request exceed", http.StatusTooManyRequests)
 				return
 			}
 
@@ -141,4 +186,61 @@ func ChainMiddleware(handler http.Handler, middlewares ...func(http.Handler) htt
 		handler = middlewares[i](handler)
 	}
 	return handler
+}
+
+func routeHandler(w http.ResponseWriter, r *http.Request) {
+	rs := GetRouter()
+	if rs == nil {
+		http.Error(w, "router not ready", http.StatusServiceUnavailable)
+		return
+	}
+	b, ok := rs.m[strings.ToLower(r.Host)]
+	if !ok {
+		http.NotFound(w, r)
+		return
+	}
+	b.ServeHTTP(w, r)
+}
+
+func httpEntry(w http.ResponseWriter, r *http.Request) {
+	rs := GetRouter()
+	if rs == nil {
+		http.Error(w, "router not ready", http.StatusServiceUnavailable)
+		return
+	}
+	if b, ok := rs.s[strings.ToLower(r.Host)]; ok && b.forceTLS {
+		url := *r.URL
+		url.Scheme = "https"
+		url.Host = r.Host
+		http.Redirect(w, r, url.String(), http.StatusMovedPermanently)
+		return
+	}
+	routeHandler(w, r)
+}
+
+func ServeHTTP(addr string) *http.Server {
+	hs := &http.Server{Addr: addr, Handler: http.HandlerFunc(httpEntry)}
+	go func() {
+		log.Printf("HTTP listening on %s", addr)
+		if err := hs.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			log.Fatalf("http server: %v", err)
+		}
+	}()
+	return hs
+}
+
+func ServeHTTPS(addr string, cm *CertManager) *http.Server {
+	ts := &http.Server{Addr: addr, Handler: http.HandlerFunc(routeHandler)}
+	ts.TLSConfig = &tls.Config{GetCertificate: cm.GetCertificate, MinVersion: tls.VersionTLS12}
+	go func() {
+		log.Printf("HTTPS listening on %s", addr)
+		ln, err := tls.Listen("tcp", addr, ts.TLSConfig)
+		if err != nil {
+			log.Fatalf("https listen: %v", err)
+		}
+		if err := ts.Serve(ln); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			log.Fatalf("https server: %v", err)
+		}
+	}()
+	return ts
 }

@@ -15,7 +15,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-func LoadConfigFIle(configPath string) ([]byte, error) {
+func LoadConfigFile(configPath string) ([]byte, error) {
 	cwd, err := os.Getwd()
 	if err != nil {
 		cwd = "/"

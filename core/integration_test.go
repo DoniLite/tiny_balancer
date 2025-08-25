@@ -43,9 +43,9 @@ func TestIntegration_LoadBalancerWithHealthCheck(t *testing.T) {
 	}))
 	defer unhealthy.Close()
 
-	server := &Server{Name: "main", Logs: make(chan Logs, 10)}
-	serverHealthy := &Server{Name: "healthy", URL: healthy.URL, Logs: make(chan Logs, 10)}
-	serverUnhealthy := &Server{Name: "unhealthy", URL: unhealthy.URL, Logs: make(chan Logs, 10)}
+	server := &Server{Name: "main"}
+	serverHealthy := &Server{Name: "healthy", URL: healthy.URL}
+	serverUnhealthy := &Server{Name: "unhealthy", URL: unhealthy.URL}
 
 	_ = serverHealthy.UpgradeProxy()
 	_ = serverUnhealthy.UpgradeProxy()

@@ -6,22 +6,22 @@ import (
 )
 
 type Hub struct {
-	clients    map[*connection]bool // List of connection registered
-	register   chan *connection     // Channel for connection registration
-	unregister chan *connection     // Channel for connection removing
+	clients    map[*Connection]bool // List of connection registered
+	register   chan *Connection     // Channel for connection registration
+	unregister chan *Connection     // Channel for connection removing
 	broadcast  chan *Message        // Diffusing message for all registered instance
 
 	mu sync.RWMutex
 
 	// Handler for incoming message
-	messageHandler func(msg *Message, client *connection) error
+	messageHandler func(msg *Message, client *Connection) error
 }
 
-func newHub(handler func(msg *Message, client *connection) error) *Hub {
+func newHub(handler func(msg *Message, client *Connection) error) *Hub {
 	return &Hub{
-		clients:    make(map[*connection]bool),
-		register:   make(chan *connection),
-		unregister: make(chan *connection),
+		clients:    make(map[*Connection]bool),
+		register:   make(chan *Connection),
+		unregister: make(chan *Connection),
 		broadcast:  make(chan *Message),
 		messageHandler: handler,
 	}
@@ -42,7 +42,7 @@ func (h *Hub) run() {
 			h.mu.Lock()
 			if _, ok := h.clients[conn]; ok {
 				delete(h.clients, conn)
-				conn.closeSend()
+				conn.CloseSend()
 				log.Printf("Hub: Client unregistered (%p). Total clients: %d\n", conn.ws, len(h.clients))
 			} else {
 				log.Printf("Hub: Unregister request for non-existent client (%p)\n", conn.ws)
@@ -61,18 +61,17 @@ func (h *Hub) run() {
 				}
 			}
 			h.mu.RUnlock()
-
 		}
 	}
 }
 
 // Calling this handler if a connection is disconnected
-func (h *Hub) handleDisconnect(conn *connection) {
+func (h *Hub) handleDisconnect(conn *Connection) {
 	h.unregister <- conn
 }
 
 // handler passed to readPump for incoming message.
-func (h *Hub) handleIncomingMessage(msg *Message, conn *connection) error {
+func (h *Hub) handleIncomingMessage(msg *Message, conn *Connection) error {
 	if h.messageHandler != nil {
 		return h.messageHandler(msg, conn)
 	}

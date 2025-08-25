@@ -20,27 +20,27 @@ const (
 	maxMessageSize = 8192 // Adjust if the body size can be consequent (ex: build spec)
 )
 
-type connection struct {
+type Connection struct {
 	ws   *websocket.Conn
 	send chan *Message // Channel for writing the i/o message
 }
 
 // creating a new connection struct.
-func newConnection(ws *websocket.Conn) *connection {
-	return &connection{
+func NewConnection(ws *websocket.Conn) *Connection {
+	return &Connection{
 		ws:   ws,
 		send: make(chan *Message, 256),
 	}
 }
 
 // fetching message from the channels 'send' to the WebSocket connection.
-func (c *connection) write(msgType int, payload []byte) error {
+func (c *Connection) write(msgType int, payload []byte) error {
 	c.ws.SetWriteDeadline(time.Now().Add(writeWait))
 	return c.ws.WriteMessage(msgType, payload)
 }
 
 // Handling sorting and periodical ping messages to the server
-func (c *connection) writePump() {
+func (c *Connection) writePump() {
 	ticker := time.NewTicker(pingPeriod)
 	defer func() {
 		ticker.Stop()
@@ -95,7 +95,7 @@ func (c *connection) writePump() {
 }
 
 // Handling entering message
-func (c *connection) readPump(handler func(msg *Message, conn *connection) error, disconnect func(conn *connection)) {
+func (c *Connection) readPump(handler func(msg *Message, conn *Connection) error, disconnect func(conn *Connection)) {
 	defer func() {
 		disconnect(c)
 		c.ws.Close()
@@ -150,7 +150,7 @@ func (c *connection) readPump(handler func(msg *Message, conn *connection) error
 }
 
 // sending message asynchronously via the websocket.
-func (c *connection) sendMsg(msg *Message) {
+func (c *Connection) SendMsg(msg *Message) {
 	select {
 	case c.send <- msg:
 	default:
@@ -159,6 +159,6 @@ func (c *connection) sendMsg(msg *Message) {
 }
 
 // closing the send channel and stopping the writePump function.
-func (c *connection) closeSend() {
+func (c *Connection) CloseSend() {
 	close(c.send)
 }

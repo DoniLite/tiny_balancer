@@ -4,7 +4,6 @@ go 1.24.6
 
 require (
 	github.com/docker/go-connections v0.6.0
-	github.com/gorilla/mux v1.8.1
 	github.com/moby/moby/api v1.52.0-alpha.1
 	github.com/moby/moby/client v0.1.0-alpha.0
 )

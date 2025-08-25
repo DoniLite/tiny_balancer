@@ -20,7 +20,7 @@ func (server *Server) UpgradeProxy() error {
 	if server == nil {
 		return errors.New("nil receiver: server")
 	}
-	if server.Proxy != nil {
+	if server.proxy != nil {
 		return nil
 	}
 	serverURL, err := buildServerURL(server)
@@ -31,7 +31,7 @@ func (server *Server) UpgradeProxy() error {
 	if err != nil {
 		return err
 	}
-	server.Proxy = NewProxy(u)
+	server.proxy = NewProxy(u)
 	return nil
 }
 
@@ -233,19 +233,29 @@ func (server *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	server.logf(LOG_INFO, "[Proxy]: Forwarding %s -> %s (backend ID: %s)", r.URL.String(), target.String(), backend.ID)
 
 	// Delegate to the preconfigured reverse proxy for the backend.
-	backend.Proxy.ServeHTTP(w, req)
+	backend.proxy.ServeHTTP(w, req)
+}
+
+// Router
+
+func (rs *RouterState) AddServer(server *Server) {
+	rs.mu.Lock()
+	defer rs.mu.Unlock()
+	rs.m[strings.ToLower(server.Name)] = createSingleHttpServer(server)
+	rs.s[strings.ToLower(server.Name)] = server
 }
 
 // --- helpers ---
 
 func (s *Server) logf(level int, format string, args ...any) {
-	if s == nil || s.Logs == nil {
+	currentLogger := GetLogger()
+	if s == nil || currentLogger == nil {
 		return
 	}
 	// Non-blocking send; drop if channel is full
 	msg := fmt.Sprintf(format, args...)
 	select {
-	case s.Logs <- Logs{message: msg, logType: level}:
+	case currentLogger <- Logs{Message: msg, LogType: level}:
 	default:
 	}
 }
